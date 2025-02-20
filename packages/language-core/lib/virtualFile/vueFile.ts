@@ -1,11 +1,11 @@
 import type { VirtualCode } from '@volar/language-core';
-import { computed, Signal, signal } from 'computeds';
+import { computed, signal } from 'alien-signals';
 import type * as ts from 'typescript';
+import { allCodeFeatures } from '../plugins';
 import type { VueCompilerOptions, VueLanguagePluginReturn } from '../types';
 import { computedEmbeddedCodes } from './computedEmbeddedCodes';
 import { computedSfc } from './computedSfc';
 import { computedVueSfc } from './computedVueSfc';
-import { allCodeFeatures } from '../plugins';
 
 export class VueVirtualCode implements VirtualCode {
 
@@ -13,14 +13,15 @@ export class VueVirtualCode implements VirtualCode {
 
 	id = 'main';
 
-	getSnapshot: Signal<ts.IScriptSnapshot>;
+	private _snapshot = signal<ts.IScriptSnapshot>(undefined!);
 
 	// computeds
 
-	getVueSfc = computedVueSfc(this.plugins, this.fileName, this.languageId, () => this.getSnapshot());
-	sfc = computedSfc(this.ts, this.plugins, this.fileName, () => this.getSnapshot(), this.getVueSfc);
-	getMappings = computed(() => {
-		const snapshot = this.getSnapshot();
+	private _vueSfc = computedVueSfc(this.plugins, this.fileName, this.languageId, this._snapshot);
+	private _sfc = computedSfc(this.ts, this.plugins, this.fileName, this._snapshot, this._vueSfc);
+	private _embeddedCodes = computedEmbeddedCodes(this.plugins, this.fileName, this._sfc);
+	private _mappings = computed(() => {
+		const snapshot = this._snapshot();
 		return [{
 			sourceOffsets: [0],
 			generatedOffsets: [0],
@@ -28,18 +29,23 @@ export class VueVirtualCode implements VirtualCode {
 			data: allCodeFeatures,
 		}];
 	});
-	getEmbeddedCodes = computedEmbeddedCodes(this.plugins, this.fileName, this.sfc);
 
 	// others
 
-	get embeddedCodes() {
-		return this.getEmbeddedCodes();
-	}
 	get snapshot() {
-		return this.getSnapshot();
+		return this._snapshot();
+	}
+	get vueSfc() {
+		return this._vueSfc();
+	}
+	get sfc() {
+		return this._sfc;
+	}
+	get embeddedCodes() {
+		return this._embeddedCodes();
 	}
 	get mappings() {
-		return this.getMappings();
+		return this._mappings();
 	}
 
 	constructor(
@@ -50,10 +56,10 @@ export class VueVirtualCode implements VirtualCode {
 		public plugins: VueLanguagePluginReturn[],
 		public ts: typeof import('typescript'),
 	) {
-		this.getSnapshot = signal(initSnapshot);
+		this._snapshot(initSnapshot);
 	}
 
 	update(newSnapshot: ts.IScriptSnapshot) {
-		this.getSnapshot.set(newSnapshot);
+		this._snapshot(newSnapshot);
 	}
 }
